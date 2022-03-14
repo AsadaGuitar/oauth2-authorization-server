@@ -2,20 +2,15 @@ import AuthorizationServer.verifyForm
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.{ConnectionContext, Http, HttpConnectionContext}
-import com.softwaremill.session.{SessionConfig, SessionManager, SessionUtil}
 import com.typesafe.config.{Config, ConfigFactory}
-import data.RequestId
-import repository.{AccountRepository, ClientRepository, RedirectUrlRepository, TokenRepository}
-import slick.basic.DatabaseConfig
+import repository.{AccountRepository, AuthorizationCodeParametersRepository, AuthorizationCodeParametersTable, ClientRepository, RedirectUrlRepository, TokenRepository}
 import slick.jdbc.JdbcBackend.Database
-import slick.migration.api.{PostgresDialect, SqlMigration, TableMigration}
 
 import java.io.InputStream
 import java.security.{KeyStore, SecureRandom}
 import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 import scala.concurrent.ExecutionContextExecutor
 import scala.io.StdIn
-import scala.util.Try
 
 
 object Main extends App with ProtectedResourcesServer with AuthorizationServer {
@@ -52,17 +47,11 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
   TokenRepository.runMigration(db)
   ClientRepository.runMigration(db)
   RedirectUrlRepository.runMigration(db)
+  AuthorizationCodeParametersRepository.runMigration(db)
 
   // Akka-Actor
   implicit val system: ActorSystem = ActorSystem(systemName)
   implicit val ec: ExecutionContextExecutor = system.dispatcher
-
-  // Session
-  import com.softwaremill.session._
-  implicit def requestIdSerializer: SessionSerializer[RequestId, String] =
-    new SingleValueSessionSerializer(_.requestId, (un: String) => Try(RequestId(un)))
-  val sessionConfig = SessionConfig.default(SessionUtil.randomServerSecret())
-  override implicit val sessionManager: SessionManager[RequestId] = new SessionManager[RequestId](sessionConfig)
 
 
   // Logging
