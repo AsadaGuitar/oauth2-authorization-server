@@ -3,7 +3,8 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.{ConnectionContext, Http, HttpConnectionContext}
 import com.typesafe.config.{Config, ConfigFactory}
-import repository.{AccountRepository, AuthorizationCodeParametersRepository, AuthorizationCodeParametersTable, ClientRepository, RedirectUrlRepository, TokenRepository}
+import data.OAuth2Models.{Client, RequestParameters}
+import repository.{AccountRepository, AuthorizationCodeParametersRepository, AuthorizationCodeParametersTable, ClientRepository, RedirectUriRepository, RequestParametersRepository, TokenRepository}
 import slick.jdbc.JdbcBackend.Database
 
 import java.io.InputStream
@@ -46,8 +47,9 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
   AccountRepository.runMigration(db)
   TokenRepository.runMigration(db)
   ClientRepository.runMigration(db)
-  RedirectUrlRepository.runMigration(db)
-  AuthorizationCodeParametersRepository.runMigration(db)
+  RedirectUriRepository.runMigration(db)
+  RequestParametersRepository.runMigration(db)
+//  AuthorizationCodeParametersRepository.runMigration(db)
 
   // Akka-Actor
   implicit val system: ActorSystem = ActorSystem(systemName)
@@ -71,7 +73,7 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
 //      .enableHttps(https)
       .bind(server ~ this.protectedResourcesServer ~ this.authorizationServer)
 
-  log.info(s"Start Server: https://${host}:${port}")
+  log.info(s"Start Server: http://${host}:${port}")
 
   StdIn.readLine()
   bindingFuture

@@ -30,7 +30,7 @@ trait ProtectedResourcesServer extends TokenRepository with AccountRepository {
 
           case _ => Future(None)
         }) { bearerToken =>
-          val account: Future[Option[Account]] = this.findAccount(bearerToken.id)
+          val account: Future[Option[Account]] = this.findAccount(bearerToken.clientId)
           val r = Await.result(account, Duration.Inf)
           r match {
             case Some(value) => complete(HttpEntity(ContentTypes.`application/json`, accountJson(value)))

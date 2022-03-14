@@ -8,22 +8,25 @@
         <p>OAuth2</p>
     </div>
 
-    <form action="http://localhost:8000/approve" method="POST">
-        <div class="boxes">
-            <input type="radio" name="approve" id="box-1" value="approve" required>
-            <label for="box-1">Approve</label>
+    <form action="http://localhost:8000/approve" method="POST" autocomplete="off">
 
-            <input type="radio" name="approve" id="box-2" value="deny" required>
-            <label for="box-2">Deny</label>
+        <div class="cp_iptxt">
+            <input class="ef" type="text" id="username" placeholder="@Username" name="username">
+            <label>Username</label>
+            <span class="focus_line"></span>
+        </div>
+        <div class="cp_iptxt">
+            <input class="ef" type="password" id="password" placeholder="Password" name="password">
+            <label>Password</label>
+            <span class="focus_line"></span>
         </div>
 
         <input type="hidden" value="{{requestId}}" name="request-id"/>
 
         <div id="btn-box">
-            <button>Send</button>
+            <button id="button" disabled>Send</button>
         </div>
     </form>
-
 
 </body>
 
@@ -58,55 +61,67 @@ body {
 
 form {
   width: 300px;
-  height: 150px;
+  height: 300px;
   margin-top: 150px;
   padding: 50px;
   background: #484848;
 }
 
-/*Checkboxes styles*/
-input[type="radio"] { display: none; }
-
-input[type="radio"] + label {
-  display: block;
-  position: relative;
-  padding-left: 35px;
-  margin-bottom: 20px;
-  font: 16px 'Open Sans', Arial, sans-serif;
-  color: #ddd;
-  cursor: pointer;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+.cp_iptxt {
+    position: relative;
+    width: 80%;
+    margin: 40px 3%;
+}
+.cp_iptxt input {
+    font: 15px/24px sans-serif;
+    box-sizing: border-box;
+    width: 100%;
+    letter-spacing: 1px;
+    padding-left: 1.5em;
+    color: white;
+}
+.cp_iptxt input:focus {
+    outline: none;
 }
 
-input[type="radio"] + label:last-child { margin-bottom: 0; }
 
-input[type="radio"] + label:before {
-  content: '';
-  display: block;
-  width: 20px;
-  height: 20px;
-  border: 1px solid #6cc0e5;
-  position: absolute;
-  left: 0;
-  top: 0;
-  opacity: .6;
-  -webkit-transition: all .12s, border-color .08s;
-  transition: all .12s, border-color .08s;
+.ef {
+    padding: 4px 0;
+    border: 0;
+    border-bottom: 1px solid #1b2538;
+    background-color: transparent;
+}
+.ef ~ .focus_line {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    transition: 0.4s;
+    background-color: #1ECD97;
+}
+.ef:focus ~ .focus_line,
+.cp_iptxt.ef ~ .focus_line {
+    width: 100%;
+    transition: 0.4s;
+}
+.ef ~ label {
+    position: absolute;
+    z-index: -1;
+    top: 4px;
+    left: 0;
+    width: 100%;
+    transition: 0.3s;
+    letter-spacing: 0.5px;
+    color: #aaaaaa;
+}
+.ef:focus ~ label, .cp_iptxt.ef ~ label {
+    font-size: 12px;
+    top: -16px;
+    transition: 0.3s;
+    color: #1ECD97;
 }
 
-input[type="radio"]:checked + label:before {
-  width: 10px;
-  top: -5px;
-  left: 5px;
-  border-radius: 0;
-  opacity: 1;
-  border-top-color: transparent;
-  border-left-color: transparent;
-  -webkit-transform: rotate(45deg);
-  transform: rotate(45deg);
-}
 
 #btn-box {
     width: 100%;
@@ -119,11 +134,31 @@ button {
     width: 130px;
     height: 40px;
     border-radius: 40px;
-    font-size: 16px;
-    border: solid;
-    color: #1ECD97;
+    font-size: 14px;
+    border: 1px solid #1b2538;
+    color: #1b2538;
     background: #484848;
 }
-
 </style>
+
+<script>
+    // Not Allowed Paste.
+    window.onload = () => {
+        document.body.onpaste = () => {return false;}
+    }
+
+    const username = document.getElementById("username");
+    const password = document.getElementById("password");
+    const button   = document.getElementById("button");
+
+    password.addEventListener("input", (e) => {
+       if (8 <= e.target.value.length) {
+           if (username.value !== "") {
+               button.disabled = false;
+               button.style.border = "1px solid #1ECD97";
+               button.style.color = "#1ECD97";
+           }
+       }
+    });
+</script>
 </html>
