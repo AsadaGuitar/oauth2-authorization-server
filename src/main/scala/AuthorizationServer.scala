@@ -1,9 +1,12 @@
-import AuthorizationServer.verifyForm
+import AuthorizationServer.{generateRequestId, verifyForm}
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.Credentials.Provided
-import akka.http.scaladsl.server.directives.RouteDirectives
+import com.softwaremill.session.SessionDirectives.setSession
+import com.softwaremill.session.{SessionDirectives, SessionManager}
+import com.softwaremill.session.SessionOptions.{oneOff, usingCookies}
+import data.RequestId
 import org.fusesource.scalate.{TemplateEngine, TemplateSource}
 import repository.{AccountRepository, ClientRepository, RedirectUrlRepository, TokenRepository}
 
@@ -11,24 +14,22 @@ import java.io.File
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
 
+
 case class AuthorizationForm(id: String, code: String)
 
+
 object AuthorizationServer {
+
   private val verifyFormFile: File = new File("./src/main/resources/templates/approve.mustache")
 
   private val engine = new TemplateEngine
 
-  private def someAttributes(requestId: String, scope: Option[String]): Map[String, String] ={
-    val attributes = Map("requestId" -> requestId)
-    scope match {
-      case Some(value) => attributes ++ Map("scope" -> value)
-      case None => attributes
-    }
+  def verifyForm(requestId: String): String = {
+    engine.layout(TemplateSource.fromFile(verifyFormFile), Map("requestId" -> requestId))
   }
 
-  def verifyForm(requestId: String, scope: Option[String]): String = {
-    engine.layout(TemplateSource.fromFile(verifyFormFile), someAttributes(requestId, scope))
-  }
+  def generateRequestId(): String = scala.util.Random.alphanumeric.take(8).mkString
+
 }
 
 trait AuthorizationServer extends TokenRepository
@@ -38,10 +39,11 @@ trait AuthorizationServer extends TokenRepository
 
 
   implicit val ec: ExecutionContextExecutor
+  implicit val sessionManager: SessionManager[RequestId]
 
   val authorizationServer: Route =
-    pathPrefix("auth") {
-      pathPrefix("authorizationEndPoint") {
+    pathPrefix("authorization") {
+      pathEndOrSingleSlash {
         get {
           parameters("response_type", "client_id",
             "state", "redirect_url", "scope".optional) {
@@ -51,18 +53,36 @@ trait AuthorizationServer extends TokenRepository
                 val r = Await.result(client, Duration.Inf)
                 r match {
                   case list if list.exists(url => url.redirectUrl == redirectUrl) =>
-                    val template = verifyForm("", scope)
-                    complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, template))
+                    val requestId = generateRequestId()
+                    setSession(oneOff, usingCookies, RequestId(requestId)) {
+                      val template = verifyForm(requestId)
+                      complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, template))
+                    }
                   case _ => complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Invalid Redirect Url."))
                 }
               } else {
-                RouteDirectives.
                 complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Unsupported response_type."))
               }
           }
         }
-      } ~
-      pathPrefix("tokenEndPoint") {
+      }
+    } ~ pathPrefix("approve") {
+      pathEndOrSingleSlash {
+        post {
+          formFields("request-id", "approve") { (requestId, approve) =>
+            SessionDirectives.requiredSession(oneOff, usingCookies) {
+              case RequestId(sessionRequestId) if requestId.equals(sessionRequestId) =>
+                approve match {
+                  case "approve" => complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Access denied."))
+                  case "deny"    => complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Access denied."))
+                }
+              case _ => complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "No matching authorization request."))
+            }
+          }
+        }
+      }
+    } ~
+      pathPrefix("token") {
         post {
           authenticateBasicAsync("basic", {
             case p@Provided(id) =>
@@ -76,5 +96,5 @@ trait AuthorizationServer extends TokenRepository
           }
         }
       }
-    }
+
 }

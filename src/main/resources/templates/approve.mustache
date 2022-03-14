@@ -1,8 +1,129 @@
 <html lang="en">
 <head>
+    <title>OAuth2 Approve Page</title>
 </head>
 
 <body>
-    <h1>{{requestId}}</h1>
+    <div id="nav">
+        <p>OAuth2</p>
+    </div>
+
+    <form action="http://localhost:8000/approve" method="POST">
+        <div class="boxes">
+            <input type="radio" name="approve" id="box-1" value="approve">
+            <label for="box-1">Approve</label>
+
+            <input type="radio" name="approve" id="box-2" value="deny">
+            <label for="box-2">Deny</label>
+        </div>
+
+        <input type="hidden" value="{{requestId}}" name="request-id"/>
+
+        <div id="btn-box">
+            <button>Send</button>
+        </div>
+    </form>
+
+
 </body>
+
+<style>
+@import url(https://fonts.googleapis.com/css?family=Open+Sans);
+
+/*Page styles*/
+html { height: 100%; }
+
+body {
+  height: 100%;
+  margin: 0;
+  background: #363636;
+  display: -webkit-flex;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#nav {
+    width: 100%;
+    height: 100px;
+    margin: 0;
+    background: #484848;
+}
+
+#nav > p {
+    font: 32px 'Open Sans', Arial, sans-serif;
+    color: #ddd;
+    margin-left: 80px;
+}
+
+form {
+  width: 300px;
+  height: 150px;
+  margin-top: 150px;
+  padding: 50px;
+  background: #484848;
+}
+
+/*Checkboxes styles*/
+input[type="radio"] { display: none; }
+
+input[type="radio"] + label {
+  display: block;
+  position: relative;
+  padding-left: 35px;
+  margin-bottom: 20px;
+  font: 16px 'Open Sans', Arial, sans-serif;
+  color: #ddd;
+  cursor: pointer;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+input[type="radio"] + label:last-child { margin-bottom: 0; }
+
+input[type="radio"] + label:before {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #6cc0e5;
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: .6;
+  -webkit-transition: all .12s, border-color .08s;
+  transition: all .12s, border-color .08s;
+}
+
+input[type="radio"]:checked + label:before {
+  width: 10px;
+  top: -5px;
+  left: 5px;
+  border-radius: 0;
+  opacity: 1;
+  border-top-color: transparent;
+  border-left-color: transparent;
+  -webkit-transform: rotate(45deg);
+  transform: rotate(45deg);
+}
+
+#btn-box {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+button {
+    margin-top: 70px;
+    width: 130px;
+    height: 40px;
+    border-radius: 40px;
+    font-size: 16px;
+    border: solid;
+    color: #1ECD97;
+    background: #484848;
+}
+
+</style>
 </html>

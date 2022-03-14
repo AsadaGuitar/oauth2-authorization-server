@@ -5,5 +5,5 @@ trait OAuthMarshaller extends DefaultJsonProtocol {
 
 
   implicit val authorizationFormMarshaller: RootJsonFormat[AuthorizationForm] = jsonFormat2(AuthorizationForm)
-
+//  implicit val approveFormMarshaller: RootJsonFormat[ApproveForm] = jsonFormat2(ApproveForm)
 }
