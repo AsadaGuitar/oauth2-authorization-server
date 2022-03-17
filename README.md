@@ -1,6 +1,6 @@
 # oauth2_authorization_server @2022
 Authorization Server &amp; Protected Resources Server 
-## Supported Features By The Authorization Server
+## Supported Features
 | Authorization End Point 1     |  Authorization End Point 2     | Token End Point                              |
 | ----                          | ----                           | ----                                         |
 |  validate response type.      | get form data.                 | basic authenticate client id, client secret. |
