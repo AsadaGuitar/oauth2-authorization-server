@@ -12,41 +12,38 @@ import com.softwaremill.session.SessionOptions.{oneOff, usingCookies}
 import org.fusesource.scalate.{TemplateEngine, TemplateSource}
 import repository.{AccountRepository, ClientRepository, RedirectUriRepository, RequestParametersRepository, TokenRepository}
 
-import java.io.File
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success, Try}
 import com.softwaremill.session._
 import data.OAuth2Models.{BearerToken, RequestIdParameters, RequestParameters, TokenEndPointRequest}
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import com.typesafe.config.Config
 
 
 
 object AuthorizationServer {
 
-  private val verifyFormFile: File = new File("./src/main/resources/templates/approve.mustache")
-
   private val engine = new TemplateEngine
 
-  def verifyForm(requestId: String): String = {
-    engine.layout(TemplateSource.fromFile(verifyFormFile), Map("requestId" -> requestId))
+  def verifyForm(config: Config, requestId: String): String = {
+    val approveFile = config.getString("auth.file.approve")
+    engine.layout(TemplateSource.fromFile(approveFile), Map("requestId" -> requestId))
   }
 
   def generateRequestId(): String = scala.util.Random.alphanumeric.take(8).mkString
   def generateAuthorizationCode(): String = scala.util.Random.alphanumeric.take(128).mkString
 
-
   // Session
   implicit def RequestIdParametersSerializer: SessionSerializer[RequestIdParameters, String] = {
     new MultiValueSessionSerializer[RequestIdParameters](
       toMap = {
-        case RequestIdParameters(requestId, responseType, state, redirectUri, scope) =>
-          Map("requestId" -> requestId, "responseType" -> responseType, "state" -> state, "redirectUri" -> redirectUri, "scope" -> scope)
+        case RequestIdParameters(requestId, clientId, responseType, state, redirectUri, scope) =>
+          Map("requestId" -> requestId, "clientId" -> clientId, "responseType" -> responseType,
+            "state" -> state, "redirectUri" -> redirectUri, "scope" -> scope)
       },
       fromMap = m => Try {
         RequestIdParameters(
           requestId    = m("requestId"),
+          clientId     = m("clientId"),
           responseType = m("responseType"),
           state        = m("state"),
           redirectUri  = m("redirectUri"),
@@ -57,10 +54,9 @@ object AuthorizationServer {
   }
 
   val sessionConfig: SessionConfig = SessionConfig.default(SessionUtil.randomServerSecret())
+
   implicit val sessionManager: SessionManager[RequestIdParameters] =
     new SessionManager[RequestIdParameters](sessionConfig)
-
-
 }
 
 
@@ -74,7 +70,7 @@ trait AuthorizationServer extends TokenRepository
   implicit val ec: ExecutionContextExecutor
   val config: Config
 
-  private val jwtAuthentication: JwtAuthentication = new JwtAuthentication {
+  private lazy val jwtAuthentication: JwtAuthentication = new JwtAuthentication {
     override val jwtConfig: JwtConfig = new JwtConfig(config)
   }
 
@@ -85,20 +81,25 @@ trait AuthorizationServer extends TokenRepository
           parameters("client_id", "response_type", "state", "redirect_uri", "scope") {
             (clientId, responseType, state, redirectUri, scope) =>
               if (responseType.toLowerCase.equals("code")) {
-                val redirectUriList = this.findAllRedirectUrl(clientId)
-                val r = Await.result(redirectUriList, Duration.Inf)
-                r match {
-                  case list if list.exists(uriData => uriData.uri == redirectUri) =>
-                    val requestId = generateRequestId()
-                    val params = RequestIdParameters(requestId, responseType, state, redirectUri, scope)
-                    setSession(oneOff, usingCookies, params) {
-                      val template = verifyForm(requestId)
-                      complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, template))
+                onComplete(this.findAllRedirectUrl(clientId)) {
+                  case Success(redirectUriList) =>
+                    if (redirectUriList.nonEmpty) {
+                      val requestId = generateRequestId()
+                      val params = RequestIdParameters(requestId, clientId, responseType, state, redirectUri, scope)
+                      setSession(oneOff, usingCookies, params) {
+                        val template = verifyForm(config, requestId)
+                        complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, template))
+                      }
+                    } else {
+                      complete(401, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Invalid Redirect Url.</h2>"))
                     }
-                  case _ => complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Invalid Redirect Url."))
+                  case Failure(exception) =>
+                    logRequest(exception.getMessage, Logging.ErrorLevel) {
+                      complete(500, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Server error occurred.</h2>"))
+                    }
                 }
               } else {
-                complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Unsupported response_type."))
+                complete(401, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Unsupported response_type.</h2>"))
               }
           }
         }
@@ -106,37 +107,41 @@ trait AuthorizationServer extends TokenRepository
     } ~ pathPrefix("approve") {
       pathEndOrSingleSlash {
         post {
-          formFields("request-id", "username", "password") { (requestId, username, password) =>
-            SessionDirectives.requiredSession(oneOff, usingCookies) {
-              case RequestIdParameters(sessionRequestId, responseType, state, redirectUri, scope) =>
-                responseType match {
-                  case "code" =>
-                    if (sessionRequestId.equals(requestId)) {
-                      onComplete(this.findAccount(username)) {
-                        case Success(account) if account.exists(_.password.equals(password)) =>
-                          account.fold{
-                            complete(400, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>User does not exist.</h2>"))
-                          } { _ =>
-                            val code = generateAuthorizationCode()
-                            this.createRequestParameters(RequestParameters(code, username, requestId, responseType, state, redirectUri, scope, None))
-                            val redirectUriWithQuery = Uri(redirectUri).withQuery(Query("code" -> code, "state" -> state))
-                            redirect(redirectUriWithQuery, StatusCodes.PermanentRedirect)
+          logRequest("[/approve] [POST] ", Logging.DebugLevel) {
+            formFields("request-id", "username", "password") { (requestId, username, password) =>
+              SessionDirectives.requiredSession(oneOff, usingCookies) {
+                case RequestIdParameters(sessionRequestId, clientId, responseType, state, redirectUri, scope) =>
+                  responseType match {
+                    case "code" =>
+                      logRequest("[/approve] [POST] [Param: response_type = code]") {
+                        if (sessionRequestId.equals(requestId)) {
+                          onComplete(this.findAccount(username)) {
+                            case Success(account) if account.exists(_.password.equals(password)) =>
+                              account.fold{
+                                complete(400, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>User does not exist.</h2>"))
+                              } { _ =>
+                                val code = generateAuthorizationCode()
+                                this.createRequestParameters(RequestParameters(code, username, clientId, responseType, state, redirectUri, scope, None))
+                                val redirectUriWithQuery = Uri(redirectUri).withQuery(Query("code" -> code, "state" -> state))
+                                redirect(redirectUriWithQuery, StatusCodes.SeeOther)
+                              }
+                            case Failure(exception) =>
+                              logRequest(exception.getMessage, Logging.ErrorLevel) {
+                                complete(500, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Server error occurred.</h2>"))
+                              }
+                            case _ => complete(400, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Invalid password.</h2>"))
                           }
-                        case Failure(exception) =>
-                          logRequest(exception.getMessage, Logging.ErrorLevel) {
-                            complete(500, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Server error occurred.</h2>"))
-                          }
-                        case _ => complete(400, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Invalid password.</h2>"))
+                        } else {
+                          complete(401, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>No matching authorization request.</h2>"))
+                        }
                       }
-                    } else {
-                      complete(401, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>No matching authorization request.</h2>"))
-                    }
-                  case _ =>
-                    val reason = Redirection.apply(401)(reason = "unsupported response type", "", "", allowsEntity = false)
-                    redirect(redirectUri, reason)
-                }
-              case _ =>
-                complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Invalid request."))
+                    case _ =>
+                      val reason = Redirection.apply(401)(reason = "unsupported response type", "", "", allowsEntity = false)
+                      redirect(redirectUri, reason)
+                  }
+                case _ =>
+                  complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Invalid request."))
+              }
             }
           }
         }
@@ -159,11 +164,16 @@ trait AuthorizationServer extends TokenRepository
                         val accessToken = jwtAuthentication.generateToken(params.username)
                         onComplete(this.createToken(BearerToken(client.id, accessToken, None))) {
                           case Success(_) =>
-                            val json = s"{token_type:'Bearer', access_token:'$accessToken'}"
+                            val json =
+                              s"""{
+                                  |\"token_type\":\"Bearer\",
+                                  |\"username\":\"${params.username}\",
+                                  |\"access_token\":\"$accessToken\"
+                                 |}""".stripMargin
                             complete(HttpEntity(ContentTypes.`application/json`, json))
                           case Failure(exception) =>
                             logRequest(exception.getMessage, Logging.ErrorLevel) {
-                              complete(500, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Server error occurred.</h2>"))
+                              complete(500, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Server error occurred."))
                             }
                         }
                       } else {
@@ -173,14 +183,12 @@ trait AuthorizationServer extends TokenRepository
                   }
                   case Failure(exception) =>
                     logRequest(exception.getMessage, Logging.ErrorLevel) {
-                      complete(500, HttpEntity(ContentTypes.`text/html(UTF-8)`, "<h2>Server error occurred.</h2>"))
+                      complete(500, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Server error occurred."))
                     }
                 }
               case _ => complete(400, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "unsupported grant type."))
             }
-            complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`,"" ))
           }
         }
       }
-
 }

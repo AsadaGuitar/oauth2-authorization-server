@@ -36,7 +36,9 @@ trait TokenRepository {
   protected val db: Database
   implicit val ec: ExecutionContext
 
-  def createToken(bearerToken: BearerToken): Future[Int] = db.run(BearerTokenTable.table += bearerToken)
+  def createToken(bearerToken: BearerToken): Future[Int] = db.run(
+    BearerTokenTable.table.insertOrUpdate(bearerToken)
+  )
 
   def findToken(id: String): Future[Option[BearerToken]] = {
     val query = for (p <- BearerTokenTable.table if p.clientId === id) yield p

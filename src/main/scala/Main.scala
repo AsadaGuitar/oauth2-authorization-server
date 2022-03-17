@@ -1,10 +1,11 @@
-import AuthorizationServer.verifyForm
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.directives.Credentials.Provided
 import akka.http.scaladsl.{ConnectionContext, Http, HttpConnectionContext}
 import com.typesafe.config.{Config, ConfigFactory}
-import data.OAuth2Models.{Client, RequestParameters}
-import repository.{AccountRepository, AuthorizationCodeParametersRepository, AuthorizationCodeParametersTable, ClientRepository, RedirectUriRepository, RequestParametersRepository, TokenRepository}
+import repository.{AccountRepository, ClientRepository, RedirectUriRepository, RequestParametersRepository, TokenRepository}
+import slick.jdbc.JdbcBackend
 import slick.jdbc.JdbcBackend.Database
 
 import java.io.InputStream
@@ -34,7 +35,7 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
   }
 
   // Get Configuration
-  val config: Config = ConfigFactory.load()
+  override val config: Config = ConfigFactory.load()
 
   // Server Configuration
   val host: String = config.getString("http.host")
@@ -49,29 +50,32 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
   ClientRepository.runMigration(db)
   RedirectUriRepository.runMigration(db)
   RequestParametersRepository.runMigration(db)
-//  AuthorizationCodeParametersRepository.runMigration(db)
 
   // Akka-Actor
   implicit val system: ActorSystem = ActorSystem(systemName)
   implicit val ec: ExecutionContextExecutor = system.dispatcher
 
-
   // Logging
   val log = system.log
 
-  import akka.http.scaladsl.server.Directives._
-  val server = path("html") {
-    get{
-      val template = verifyForm("client_id")
-      complete(HttpEntity(ContentTypes.`text/html(UTF-8)`, template))
+
+  val server = path("auth"){
+    get {
+      authenticateOAuth2("Bearer", {
+        case Provided(identifier) => Some(identifier)
+        case _ => Some("failure")
+      }) { token =>
+        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, token))
+      }
     }
   }
+
 
   // Start Server
   val bindingFuture =
     Http().newServerAt(host, port)
 //      .enableHttps(https)
-      .bind(server ~ this.protectedResourcesServer ~ this.authorizationServer)
+      .bind(server ~ this.authorizationServer ~ this.protectedResourcesServer)
 
   log.info(s"Start Server: http://${host}:${port}")
 

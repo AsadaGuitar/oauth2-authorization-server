@@ -1,41 +1,52 @@
+import akka.event.Logging
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.server.directives.Credentials.Provided
+import com.emarsys.jwt.akka.http.{JwtAuthentication, JwtConfig}
+import com.typesafe.config.Config
 import repository.{Account, AccountRepository, TokenRepository}
+import spray.json.{RootJsonFormat, enrichAny}
 
-import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContextExecutor, Future}
+import scala.util.{Failure, Success}
 
-trait ProtectedResourcesServer extends TokenRepository with AccountRepository {
+
+
+trait ProtectedResourcesServer extends TokenRepository
+  with AccountRepository with JwtAuthentication with OAuthMarshaller {
 
   implicit val ec: ExecutionContextExecutor
+  val config: Config
 
-  def accountJson(account: Account): String =
-    s"""{
-       | 'id':'${account.id}',
-       | 'name':'${account.name}',
-       | 'password':'${account.password}',
-       | 'email':'${account.email}',
-       | 'created':'${account.created}'
-       |}
-       |""".stripMargin
+  override lazy val jwtConfig: JwtConfig = new JwtConfig(config)
 
   val protectedResourcesServer: Route =
     pathPrefix("account" / Remaining) { id =>
-      post {
-        authenticateOAuth2Async("bearer", {
-          case p@Provided(token) =>
-            this.findToken(id).map(_.filter(_.accessToken == token))
-
-          case _ => Future(None)
-        }) { bearerToken =>
-          val account: Future[Option[Account]] = this.findAccount(bearerToken.clientId)
-          val r = Await.result(account, Duration.Inf)
-          r match {
-            case Some(value) => complete(HttpEntity(ContentTypes.`application/json`, accountJson(value)))
-            case None =>
-              complete(401, HttpEntity(ContentTypes.`text/plain(UTF-8)`, "Not Found repository.Account."))
+      get {
+        logRequest(s"/account/$id") {
+          authenticateOAuth2("Bearer", {
+            case Provided(identifier) => Some(identifier)
+            case _ => None
+          }) { token =>
+            jwtAuthenticateToken(Some(token), as[String]) { tokenId =>
+              val username = tokenId.filter(c => c != '{' && c != '}')
+                if (username.equals(id)) {
+                  onComplete(this.findAccount(username)) {
+                    case Success(accountOption) =>
+                      accountOption.fold {
+                        complete(402, HttpEntity(ContentTypes.`application/json`, "Not found account."))
+                      } { account =>
+                        complete(HttpEntity(ContentTypes.`application/json`, account.toJson.toString()))
+                      }
+                    case Failure(exception) => logRequest(exception.getMessage, Logging.ErrorLevel) {
+                      complete(500, HttpEntity(ContentTypes.`application/json`, "Server error occurred."))
+                    }
+                  }
+                } else {
+                  complete(402, HttpEntity(ContentTypes.`application/json`, "Invalid user id."))
+                }
+            }
           }
         }
       }

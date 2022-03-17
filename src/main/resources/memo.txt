@@ -1,0 +1,47 @@
+OAuth2
+
+
+Client①
+Request Method GET
+QueryParameters
+Method
+　・generate state.
+　・build request parameters.
+Returns
+　・redirect Authorization End Point.
+
+
+Authorization End Point①
+Request Method GET
+QueryParameters
+　・client_id
+　・redirect_uri
+　・scope
+　・state
+　・response_type
+　
+Method
+　・validate redirect_uri, response_type
+　・split to scope param by white space.
+　・generate request_id and store request parameters to session.
+　
+Returns
+　・return authorization page with client_id, request_id, scope.
+
+
+Authorization End Point②
+Request Method POST
+QueryParameters
+　
+Method
+　・get request_id from request body.
+　・take request_parameters by request_id.
+　・delete request_parameters.
+　・validate response_type
+　・generate authorization_code.
+　・store request_parameters, scope, user_id, client_id to database.
+　・authenticate user.
+　
+Returns
+　・redirect redirect_uri with ‘code’ and ‘state’ as request_parameters.
+

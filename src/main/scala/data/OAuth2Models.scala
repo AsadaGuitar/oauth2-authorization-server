@@ -12,9 +12,9 @@ object OAuth2Models {
   case class BearerToken(clientId: String, accessToken: String, refreshToken: Option[String])
 
   // Session Data Models
-  case class RequestIdParameters(requestId: String, responseType: String, state: String,
+  case class RequestIdParameters(requestId: String, clientId: String, responseType: String, state: String,
                                  redirectUri: String, scope: String)
 
   // Request Data
-  case class TokenEndPointRequest(grantType: String, code: String)
+  case class TokenEndPointRequest(grant_type: String, code: String)
 }

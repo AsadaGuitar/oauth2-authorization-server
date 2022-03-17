@@ -21,7 +21,7 @@ object RedirectUriRepository {
       .addColumns(_.id, _.clientId, _.redirectUri)
 
   private val seedRedirectUrl = SqlMigration(
-    "INSERT INTO redirect_uri(client_id, uri) VALUES ('client_1', 'https://www.pricam.net');",
+    "INSERT INTO redirect_uri(client_id, uri) VALUES ('client_1', 'http://localhost:8080/oauth/peaceful/redirect');",
     "INSERT INTO redirect_uri(client_id, uri) VALUES ('client_2', 'https://www.sample2.com');",
   )
 

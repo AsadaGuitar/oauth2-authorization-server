@@ -5,6 +5,7 @@ import slick.jdbc.JdbcBackend.Database
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.Tag
 import slick.migration.api.{PostgresDialect, SqlMigration, TableMigration}
+import slick.sql.SqlProfile.ColumnOption.SqlType
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -20,8 +21,8 @@ object AccountRepository {
       .addColumns(_.id, _.name, _.password, _.email, _.created)
 
   private val seed = SqlMigration(
-    "INSERT INTO account(id, name, password, email) VALUES ('account_1', 'John Page', 'john_pass', 'john@email.com');",
-    "INSERT INTO account(id, name, password, email) VALUES ('account_2', 'Kate Filip', 'kate_pass', 'kate@email.com');"
+    "INSERT INTO account(id, name, password, email) VALUES ('account_1', 'account_1_user', 'account_1_pass', 'account_1@email.com');",
+    "INSERT INTO account(id, name, password, email) VALUES ('account_2', 'account_2_user', 'account_2_pass', 'account_2@email.com');"
   )
 
   private val migration = init & seed
@@ -63,7 +64,7 @@ class AccountTable(tag: Tag) extends Table[Account](tag,"account"){
   def name = column[String]("name")
   def password = column[String]("password")
   def email = column[String]("email")
-  def created = column[Option[java.sql.Date]]("created")
+  def created = column[Option[java.sql.Date]]("created", SqlType("timestamp default CURRENT_TIMESTAMP"))
 
   override def * =
     (id, name, password, email, created) <> ((Account.apply _).tupled, Account.unapply)
