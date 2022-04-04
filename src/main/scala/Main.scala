@@ -58,24 +58,11 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
   // Logging
   val log = system.log
 
-
-  val server = path("auth"){
-    get {
-      authenticateOAuth2("Bearer", {
-        case Provided(identifier) => Some(identifier)
-        case _ => Some("failure")
-      }) { token =>
-        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, token))
-      }
-    }
-  }
-
-
   // Start Server
   val bindingFuture =
     Http().newServerAt(host, port)
 //      .enableHttps(https)
-      .bind(server ~ this.authorizationServer ~ this.protectedResourcesServer)
+      .bind(this.authorizationServer ~ this.protectedResourcesServer)
 
   log.info(s"Start Server: http://${host}:${port}")
 
