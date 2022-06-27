@@ -61,7 +61,6 @@ object Main extends App with ProtectedResourcesServer with AuthorizationServer {
   // Start Server
   val bindingFuture =
     Http().newServerAt(host, port)
-//      .enableHttps(https)
       .bind(this.authorizationServer ~ this.protectedResourcesServer)
 
   log.info(s"Start Server: http://${host}:${port}")
