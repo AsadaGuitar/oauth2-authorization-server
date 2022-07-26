@@ -1,4 +1,4 @@
-# oauth2_authorization_server @2022
+# oauth2-authorization-server @2022
 Authorization Server &amp; Protected Resources Server 
 ## Supported Features
 | Authorization End Point 1     |  Authorization End Point 2     | Token End Point                              |
